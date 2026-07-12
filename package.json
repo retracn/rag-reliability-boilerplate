@@ -3,7 +3,17 @@
     "version": "0.1.0",
     "private": true,
     "type": "module",
-    "description": "Production-ready RAG pipeline starter built on delta-sync-sdk: deterministic hallucination checks and HMAC-secured delivery, out of the box.",
+    "description": "Deterministic RAG output validation. Intercepts LLM extraction results, validates coverage/schema/bounds against retrieved source context via a non-LLM critic, and blocks delivery of ungrounded or vacuous results before they reach a user or downstream system.",
+    "keywords": [
+        "rag-reliability",
+        "llm-hallucination-prevention",
+        "deterministic-ai",
+        "mcp-server",
+        "langchain-tool",
+        "retrieval-augmented-generation",
+        "critic-validation",
+        "webhook-delivery"
+    ],
     "engines": {
         "node": ">=20.0.0"
     },
