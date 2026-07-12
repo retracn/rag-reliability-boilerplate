@@ -1,0 +1,101 @@
+name: 'Delta-Sync RAG Reliability'
+description: >-
+  Drop a deterministic RAG hallucination-check pipeline (content-addressed
+  ingestion, non-LLM critic verification, HMAC-signed delivery) into a
+  repository's CI/CD with a single `uses:` step. Intended for autonomous
+  coding agents wiring reliability checks into an existing pipeline as well
+  as manual setup.
+author: 'automationnation'
+branding:
+  icon: 'shield'
+  color: 'blue'
+
+inputs:
+  apify-token:
+    description: 'Apify account token. Required — powers sync/synthesize/deliver.'
+    required: true
+  anthropic-api-key:
+    description: 'Bring-your-own Anthropic key. Required only if mode calls synthesize().'
+    required: false
+  webhook-secret:
+    description: 'Shared secret for HMAC-signed delivery. Required only if webhook-url is set.'
+    required: false
+  sources:
+    description: 'Newline- or comma-separated list of source URLs to ingest and verify.'
+    required: true
+  mode:
+    description: 'structured | narrative. Defaults to structured.'
+    required: false
+    default: 'structured'
+  webhook-url:
+    description: 'If set, deliver the critic-verified result here via signed webhook.'
+    required: false
+  fail-on-critic-rejected:
+    description: >-
+      If true, this step fails the job when synthesisStatus is
+      critic_rejected instead of only reporting it — use this to gate a
+      pipeline on grounded output.
+    required: false
+    default: 'false'
+
+outputs:
+  manifest-id:
+    description: 'The committed manifest ID from this run.'
+    value: ${{ steps.run.outputs.manifest-id }}
+  synthesis-status:
+    description: '"ok" or "critic_rejected" — authoritative trust signal, not a formatting check.'
+    value: ${{ steps.run.outputs.synthesis-status }}
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Set up Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+
+    - name: Install delta-sync-sdk
+      shell: bash
+      run: npm install delta-sync-sdk
+
+    - name: Run deterministic RAG verification
+      id: run
+      shell: bash
+      env:
+        APIFY_TOKEN: ${{ inputs.apify-token }}
+        ANTHROPIC_API_KEY: ${{ inputs.anthropic-api-key }}
+        WEBHOOK_SECRET: ${{ inputs.webhook-secret }}
+        SOURCES: ${{ inputs.sources }}
+        MODE: ${{ inputs.mode }}
+        WEBHOOK_URL: ${{ inputs.webhook-url }}
+        FAIL_ON_REJECTED: ${{ inputs.fail-on-critic-rejected }}
+      run: |
+        node --input-type=module -e "
+        import { Foundry } from 'delta-sync-sdk';
+
+        const sources = process.env.SOURCES.split(/[\n,]/).map(s => s.trim()).filter(Boolean);
+        const foundry = new Foundry({
+          apifyToken: process.env.APIFY_TOKEN,
+          anthropicApiKey: process.env.ANTHROPIC_API_KEY || undefined,
+          webhookSecret: process.env.WEBHOOK_SECRET || undefined,
+        });
+
+        const result = await foundry.run(
+          { sources },
+          {
+            mode: process.env.MODE === 'narrative' ? 'narrative' : 'structured',
+            webhookUrl: process.env.WEBHOOK_URL || undefined,
+          },
+        );
+
+        const fs = await import('node:fs');
+        fs.appendFileSync(process.env.GITHUB_OUTPUT, \`manifest-id=\${result.manifestId}\n\`);
+        fs.appendFileSync(process.env.GITHUB_OUTPUT, \`synthesis-status=\${result.synthesis.status}\n\`);
+
+        console.log(JSON.stringify(result, null, 2));
+
+        if (result.synthesis.status !== 'ok' && process.env.FAIL_ON_REJECTED === 'true') {
+          console.error('synthesis.status was critic_rejected — failing per fail-on-critic-rejected input.');
+          process.exit(1);
+        }
+        "

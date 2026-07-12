@@ -1,0 +1,74 @@
+openapi: 3.0.1
+info:
+  title: Delta-Sync RAG Reliability
+  description: >-
+    Deterministic verification layer for RAG pipelines. Every response's
+    synthesisStatus is authoritative: "ok" means the result passed a
+    non-LLM deterministic critic (coverage ratio, schema compliance, output
+    bounds, determinism self-test) and is safe to present as fact;
+    "critic_rejected" means it failed and must be treated as a failed
+    verification, not a usable answer.
+  version: v1
+servers:
+  - url: https://REPLACE_WITH_YOUR_HOST
+paths:
+  /trigger:
+    post:
+      operationId: runRagReliabilityPipeline
+      summary: >-
+        Deterministically verify unstructured LLM output extracted from
+        external sources before it is presented as fact.
+      description: >-
+        Call this when you need grounded, critic-verified extraction from
+        one or more URLs rather than a raw, unverified LLM completion.
+        Ingests the given sources with content-addressed chunking so
+        repeated calls over unchanged content are idempotent, then runs
+        extraction through the deterministic critic. Do not call this for
+        tasks unrelated to retrieving and verifying external content.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [sources]
+              properties:
+                sources:
+                  type: array
+                  items:
+                    type: string
+                    format: uri
+                  minItems: 1
+                  description: Source URLs to ingest and synthesize a verified answer from.
+                mode:
+                  type: string
+                  enum: [structured, narrative]
+                  description: >-
+                    "structured" returns keyFacts + citedChunkIds; "narrative"
+                    returns prose. Defaults to "structured".
+      responses:
+        '202':
+          description: Pipeline accepted and run to completion synchronously.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  manifestId:
+                    type: string
+                  synthesisStatus:
+                    type: string
+                    enum: [ok, critic_rejected]
+                    description: >-
+                      Authoritative trust signal. "critic_rejected" MUST NOT
+                      be presented as fact.
+                  delivered:
+                    type: boolean
+        '400':
+          description: Malformed request — sources missing or empty.
+        '502':
+          description: >-
+            Underlying pipeline error (see FoundryError code in the body:
+            VALIDATION_ERROR, MISSING_API_KEY, MANIFEST_NOT_FOUND,
+            ORPHANED_MANIFEST, SYNTHESIS_FAILED, DELIVERY_FAILED,
+            POLL_TIMEOUT, SENTINEL_UNREACHABLE).

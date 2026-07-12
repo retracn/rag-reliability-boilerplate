@@ -1,0 +1,18 @@
+{
+    "schema_version": "v1",
+    "name_for_human": "Delta-Sync RAG Reliability",
+    "name_for_model": "delta_sync_rag_reliability",
+    "description_for_human": "Deterministic hallucination checks and HMAC-signed delivery for RAG pipelines.",
+    "description_for_model": "Use this tool when you need deterministic validation of unstructured data extracted from external documents or URLs, specifically to detect and block RAG hallucination, stale-retrieval, or vacuous-result failures before an answer is presented as fact. Call POST /trigger with a JSON body of { sources: string[], mode?: 'structured' | 'narrative' } to ingest sources with content-addressed chunking and run LLM extraction through a non-LLM deterministic critic (coverage_ratio, schema_compliance, output_bounds, determinism_self_test — code, not a second model call). The response's synthesisStatus field is authoritative: 'ok' means the extraction passed every critic check and is safe to present as fact; 'critic_rejected' means it failed grounding checks and MUST NOT be presented as fact — treat it the same as a failed verification, not as a usable answer. Do not call this tool for tasks that do not involve retrieving and verifying information from external sources.",
+    "auth": {
+        "type": "none"
+    },
+    "api": {
+        "type": "openapi",
+        "url": "https://REPLACE_WITH_YOUR_HOST/openapi.yaml",
+        "is_user_authenticated": false
+    },
+    "logo_url": "https://REPLACE_WITH_YOUR_HOST/logo.png",
+    "contact_email": "REPLACE_WITH_YOUR_CONTACT_EMAIL",
+    "legal_info_url": "https://REPLACE_WITH_YOUR_REPO_URL"
+}

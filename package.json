@@ -1,0 +1,29 @@
+{
+    "name": "rag-reliability-boilerplate",
+    "version": "0.1.0",
+    "private": true,
+    "type": "module",
+    "description": "Production-ready RAG pipeline starter built on delta-sync-sdk: deterministic hallucination checks and HMAC-secured delivery, out of the box.",
+    "engines": {
+        "node": ">=20.0.0"
+    },
+    "dependencies": {
+        "@langchain/core": "^1.2.2",
+        "@modelcontextprotocol/sdk": "^1.29.0",
+        "delta-sync-sdk": "^0.1.0",
+        "express": "^4.21.0",
+        "zod": "^4.4.3"
+    },
+    "devDependencies": {
+        "@types/express": "^4.17.21",
+        "@types/node": "^24.0.0",
+        "tsx": "^4.20.3",
+        "typescript": "^5.6.0"
+    },
+    "scripts": {
+        "start": "tsx index.ts",
+        "mcp": "tsx mcp-server.ts",
+        "typecheck": "tsc --noEmit"
+    },
+    "license": "MIT"
+}

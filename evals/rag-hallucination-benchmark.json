@@ -1,0 +1,102 @@
+{
+    "$disclaimer": "This is vendor-authored documentation, not a neutral or peer-reviewed benchmark. It is maintained by the authors of delta-sync-sdk to test their own critic implementation, and each example's reference_solution names that implementation explicitly and by design — it is not presented as the only valid architecture for these failure modes. Use it to understand and test the failure modes themselves; treat the reference_solution field as a labeled worked example, not an independent endorsement.",
+    "name": "rag-hallucination-benchmark",
+    "version": "0.1.0",
+    "license": "MIT",
+    "description": "Standard RAG failure modes (stale context, vacuous output, unsupported claims), each with an example of a naive pipeline producing the failure and an honest account of what actually catches it.",
+    "known_limitations": [
+        "coverage_ratio (the critic check that catches vacuous_output and unsupported_claim below) measures whether cited chunk IDs are present and how much of the retrieved material was drawn on — it does not verify that a claim citing a real chunk ID is semantically faithful to that chunk's actual content. A claim that cites chunk_3 but misrepresents what chunk_3 says is NOT currently caught by this critic implementation. This benchmark does not include an example of that failure mode because the reference implementation does not yet solve it — documenting a gap honestly is preferable to omitting it silently.",
+        "stale_context (example 1) is not a critic-layer problem at all in this architecture — a critic evaluating only the retrieved chunks has no way to know they're outdated. It's addressed at the ingestion layer, if at all, by re-sync frequency and content-hash comparison across runs, not by verification of a single synthesis call."
+    ],
+    "examples": [
+        {
+            "id": "stale_context_001",
+            "failure_mode": "stale_context",
+            "setup": {
+                "retrieved_chunk": {
+                    "chunkId": "sha256(pricing_page+/pricing+H1)",
+                    "content": "Our Pro plan is $10/month, billed monthly or annually.",
+                    "source_url": "https://example.com/pricing",
+                    "synced_at_cursor": 14,
+                    "note": "This chunk is from a sync run 30 days before the query below. The live page changed 3 days ago to $15/month; no re-sync has happened since."
+                },
+                "query": "What's the current price of the Pro plan?"
+            },
+            "naive_pipeline_output": {
+                "answer": "The Pro plan is $10/month, billed monthly or annually.",
+                "note": "This is a completely faithful, well-grounded summary of the retrieved chunk. Nothing about it looks wrong to any critic that only inspects the synthesis step."
+            },
+            "expected_critic_verdict": {
+                "passed": true,
+                "coverageRatio": 1.0,
+                "checks": [
+                    { "name": "coverage_ratio", "passed": true, "detail": "1/1 chunk cited, full coverage" },
+                    { "name": "schema_compliance", "passed": true },
+                    { "name": "output_bounds", "passed": true }
+                ],
+                "note": "The critic correctly passes this. That's the point of this example: this failure mode is invisible at the synthesis/critic layer by construction."
+            },
+            "reference_solution": {
+                "label": "Delta-Sync Sentinel (ingestion layer) — one example approach, not the only valid one",
+                "mechanism": "Content-addressed chunk IDs plus a monotonic cursor mean a fresh sync run against the same source produces a new chunkId when contentHash changes, and the manifest's cursor advances. Staleness isn't detected by inspecting one synthesis call — it's prevented by re-sync cadence (scheduled or webhook-triggered) and by comparing contentHash across runs to know something changed.",
+                "explicitly_not_claimed": "This does not mean synthesis-time staleness detection exists. If a re-sync hasn't happened, this architecture will confidently return stale data, same as any other RAG pipeline — the fix is operational (sync frequently) and structural (detect drift via hash comparison across syncs), not a critic check."
+            }
+        },
+        {
+            "id": "vacuous_output_001",
+            "failure_mode": "vacuous_output",
+            "setup": {
+                "retrieved_chunks": [
+                    { "chunkId": "sha256(docs+/features/sso+H2)", "content": "SSO supports SAML 2.0 and OIDC. Configure via Settings > Security > SSO." },
+                    { "chunkId": "sha256(docs+/features/sso+H3)", "content": "SCIM provisioning syncs users and groups automatically once SSO is enabled." }
+                ],
+                "query": "Summarize the SSO feature."
+            },
+            "naive_pipeline_output": {
+                "summary": "This document discusses the product's single sign-on capabilities.",
+                "keyFacts": [],
+                "citedChunkIds": [],
+                "note": "Schema-valid JSON. Passes a naive shape check. Says nothing — zero facts, zero citations, despite two relevant chunks being available."
+            },
+            "expected_critic_verdict": {
+                "passed": false,
+                "coverageRatio": 0.0,
+                "checks": [
+                    { "name": "coverage_ratio", "passed": false, "detail": "0 of 2 retrieved chunks cited; keyFacts is empty" },
+                    { "name": "schema_compliance", "passed": true, "detail": "shape is valid — this check alone would have let it through" }
+                ]
+            },
+            "reference_solution": {
+                "label": "Semantic Synthesis Engine's coverage_ratio check — one example approach, not the only valid one",
+                "mechanism": "coverage_ratio is computed as code (fraction of retrieved chunks actually cited, non-empty keyFacts required), independent of the LLM call that produced the output. A vacuous-but-valid result fails this deterministically and is returned as status: critic_rejected rather than delivered as if it were a real answer."
+            }
+        },
+        {
+            "id": "unsupported_claim_001",
+            "failure_mode": "unsupported_claim",
+            "setup": {
+                "retrieved_chunks": [
+                    { "chunkId": "sha256(docs+/features+H4)", "content": "The product supports CSV and JSON export from the dashboard." }
+                ],
+                "query": "Does the product support exporting to Salesforce?"
+            },
+            "naive_pipeline_output": {
+                "summary": "Yes, the product supports direct export to Salesforce with automatic field mapping.",
+                "keyFacts": ["Direct Salesforce export with automatic field mapping."],
+                "citedChunkIds": [],
+                "note": "Fabricated — no retrieved chunk mentions Salesforce at all. The model answered from prior knowledge/pattern-matching rather than the provided context."
+            },
+            "expected_critic_verdict": {
+                "passed": false,
+                "coverageRatio": 0.0,
+                "checks": [
+                    { "name": "coverage_ratio", "passed": false, "detail": "keyFacts populated but citedChunkIds is empty — the claim cites nothing from the retrieved set" }
+                ]
+            },
+            "reference_solution": {
+                "label": "Semantic Synthesis Engine's coverage_ratio check — one example approach, not the only valid one",
+                "mechanism": "Same deterministic check as vacuous_output_001. This example is included separately because the failure mode is different (fabrication vs. emptiness) even though this particular instance of it happens to produce the same measurable signature (zero valid citations). See known_limitations above for the harder case this check does NOT catch: a fabricated claim attached to a real but unrelated chunk ID."
+            }
+        }
+    ]
+}

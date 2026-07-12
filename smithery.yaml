@@ -1,0 +1,44 @@
+# Smithery configuration file: https://smithery.ai/docs/config#smitheryyaml
+# Format verified against a live, real Smithery-listed server (mark3labs/mcp-filesystem-server)
+# at the time this was written — check Smithery's current docs before submitting, in case the
+# schema has since changed.
+
+startCommand:
+  type: stdio
+  configSchema:
+    # JSON Schema defining the configuration options for the MCP.
+    type: object
+    required:
+      - apifyToken
+    properties:
+      apifyToken:
+        type: string
+        description: >-
+          Apify account token. Powers the deterministic ingest/critic/deliver
+          pipeline (sync, synthesize, deliver) via the Delta-Sync actors.
+      anthropicApiKey:
+        type: string
+        description: >-
+          Bring-your-own Anthropic key. Required only to call the synthesis
+          step (LLM extraction through the deterministic critic).
+      webhookSecret:
+        type: string
+        description: >-
+          Shared secret for HMAC-signing transactional webhook delivery.
+          Required only if the caller also wants signed delivery, not just
+          the verified in-response result.
+  commandFunction:
+    |-
+    (config) => ({
+      command: 'node',
+      args: ['--import', 'tsx', 'mcp-server.ts'],
+      env: {
+        APIFY_TOKEN: config.apifyToken,
+        ANTHROPIC_API_KEY: config.anthropicApiKey || '',
+        WEBHOOK_SECRET: config.webhookSecret || ''
+      }
+    })
+  exampleConfig:
+    apifyToken: your-apify-token
+    anthropicApiKey: your-anthropic-key
+    webhookSecret: your-webhook-secret
